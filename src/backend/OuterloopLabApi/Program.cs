@@ -1,133 +1,65 @@
-using System.Text.RegularExpressions;
-using Azure.Core;
 using OuterloopLabApi.Configuration;
-using OuterloopLabApi.Contracts;
-using OuterloopLabApi.Domain;
 using OuterloopLabApi.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddProblemDetails();
 
-var applicationEnvironment = ApplicationEnvironment.FromEnvironment();
-builder.Services.AddSingleton(applicationEnvironment);
-builder.Services.AddSingleton<TokenCredential>(_ => CredentialFactory.Create(applicationEnvironment.ManagedIdentityClientId));
-builder.Services.AddSingleton<ICosmosProvisioner, CosmosProvisioner>();
-builder.Services.AddSingleton<IConversionAuditRepository, CosmosConversionAuditRepository>();
-builder.Services.AddSingleton<ICurrencyProviderResponseMapper, FlexibleCurrencyProviderResponseMapper>();
-builder.Services.AddHttpClient<ICurrencyRateProvider, ExternalCurrencyRateProvider>((sp, client) =>
-{
-    var environment = sp.GetRequiredService<ApplicationEnvironment>();
-    client.BaseAddress = new Uri(environment.CurrencyApiBaseUrl, UriKind.Absolute);
-    client.Timeout = TimeSpan.FromSeconds(10);
-});
-builder.Services.AddScoped<ICurrencyConversionService, CurrencyConversionService>();
+var environment = LogViewerEnvironment.FromEnvironment();
+builder.Services.AddSingleton(environment);
+builder.Services.AddSingleton<LogAnalyticsLogService>();
 
 var app = builder.Build();
 
-await app.Services.GetRequiredService<ICosmosProvisioner>()
-    .EnsureInitializedAsync(app.Logger, app.Lifetime.ApplicationStopping);
-
 app.MapGet("/", () => Results.Ok(new { status = "ok" }));
 
-app.MapPost("/api/conversions", async Task<IResult> (
-    ConversionRequest request,
-    ICurrencyConversionService service,
-    CancellationToken cancellationToken) =>
-{
-    var validationErrors = ConversionRequestValidator.Validate(request);
-    if (validationErrors.Count > 0)
+app.MapGet(
+    "/api/logs",
+    async Task<IResult> (
+        string enrollmentId,
+        int? limit,
+        string? search,
+        int? hours,
+        LogAnalyticsLogService service,
+        CancellationToken cancellationToken) =>
     {
-        return Results.ValidationProblem(validationErrors, title: "One or more validation errors occurred.");
-    }
+        var enrollmentNumber = EnrollmentResolver.TryResolveNumber(enrollmentId);
+        if (enrollmentNumber is null)
+        {
+            return Results.ValidationProblem(
+                new Dictionary<string, string[]>
+                {
+                    ["enrollmentId"] = ["Provide an enrollment id with a trailing number (for example 1100 or adlc-1100)."]
+                },
+                title: "One or more validation errors occurred.");
+        }
 
-    try
-    {
-        var record = await service.CreateConversionAsync(request, cancellationToken);
-        var response = ConversionAuditResponse.FromRecord(record);
-        return Results.Created($"/api/conversions/{response.Id}", response);
-    }
-    catch (CurrencyRateProviderUnavailableException)
-    {
-        return Results.Problem(
-            title: "Currency rate provider unavailable",
-            detail: "The currency rate provider could not supply a usable rate at this time.",
-            statusCode: StatusCodes.Status503ServiceUnavailable);
-    }
-});
+        var effectiveLimit = Math.Clamp(limit ?? 100, 1, 500);
+        var effectiveHours = Math.Clamp(hours ?? 1, 1, 720);
+        var containerAppName = EnrollmentResolver.BuildContainerAppName(enrollmentNumber.Value);
 
-app.MapGet("/api/conversions/{id}", async Task<IResult> (
-    string id,
-    IConversionAuditRepository repository,
-    CancellationToken cancellationToken) =>
-{
-    var record = await repository.GetByIdAsync(id, cancellationToken);
-    return record is null
-        ? Results.NotFound()
-        : Results.Ok(ConversionAuditResponse.FromRecord(record));
-});
-
-app.MapGet("/api/conversions", async Task<IResult> (
-    int? limit,
-    IConversionAuditRepository repository,
-    CancellationToken cancellationToken) =>
-{
-    var effectiveLimit = limit ?? 10;
-    if (effectiveLimit is <= 0 or > 100)
-    {
-        return Results.ValidationProblem(
-            new Dictionary<string, string[]>
+        try
+        {
+            var result = await service.QueryAsync(enrollmentNumber.Value, effectiveHours, search, effectiveLimit, cancellationToken);
+            return Results.Ok(new
             {
-                ["limit"] = ["Limit must be between 1 and 100."]
-            },
-            title: "One or more validation errors occurred.");
-    }
-
-    var records = await repository.ListRecentAsync(effectiveLimit, cancellationToken);
-    return Results.Ok(records.Select(ConversionAuditResponse.FromRecord).ToArray());
-});
+                enrollmentNumber = enrollmentNumber.Value,
+                containerAppName,
+                count = result.Count,
+                logs = result.Logs
+            });
+        }
+        catch (Exception exception)
+        {
+            return Results.Problem(
+                title: "Log query failed",
+                detail: $"Could not query logs for {containerAppName}: {exception.Message}",
+                statusCode: StatusCodes.Status502BadGateway);
+        }
+    });
 
 app.Run();
 
 public partial class Program
 {
-}
-
-internal static partial class ConversionRequestValidator
-{
-    private static readonly Regex CurrencyCodePattern = new("^[A-Z]{3}$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
-
-    public static Dictionary<string, string[]> Validate(ConversionRequest request)
-    {
-        var errors = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
-
-        if (request.Amount <= 0)
-        {
-            AddError(nameof(request.Amount), "Amount must be greater than zero.");
-        }
-
-        ValidateCurrency(nameof(request.FromCurrency), request.FromCurrency);
-        ValidateCurrency(nameof(request.ToCurrency), request.ToCurrency);
-
-        return errors.ToDictionary(entry => entry.Key, entry => entry.Value.ToArray(), StringComparer.OrdinalIgnoreCase);
-
-        void ValidateCurrency(string fieldName, string value)
-        {
-            if (string.IsNullOrWhiteSpace(value) || !CurrencyCodePattern.IsMatch(value))
-            {
-                AddError(fieldName, "Currency code must be a 3-letter uppercase code.");
-            }
-        }
-
-        void AddError(string key, string message)
-        {
-            if (!errors.TryGetValue(key, out var fieldErrors))
-            {
-                fieldErrors = [];
-                errors[key] = fieldErrors;
-            }
-
-            fieldErrors.Add(message);
-        }
-    }
 }

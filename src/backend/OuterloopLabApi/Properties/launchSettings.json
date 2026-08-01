@@ -5,18 +5,11 @@
       "commandName": "Project",
       "dotnetRunMessages": true,
       "launchBrowser": true,
-      "applicationUrl": "http://localhost:5161",
+      "applicationUrl": "http://localhost:3000",
       "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development"
-      }
-    },
-    "https": {
-      "commandName": "Project",
-      "dotnetRunMessages": true,
-      "launchBrowser": true,
-      "applicationUrl": "https://localhost:7253;http://localhost:5161",
-      "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development"
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "LOG_ANALYTICS_WORKSPACE_ID": "529a58d4-285e-45db-aa8b-90757ba2fc0b",
+        "LOG_ANALYTICS_TABLE": "ContainerAppConsoleLogs_CL"
       }
     }
   }

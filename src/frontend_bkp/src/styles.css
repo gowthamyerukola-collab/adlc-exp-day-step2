@@ -26,12 +26,18 @@ input {
   padding: 2rem;
 }
 
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
 .panel {
   background: #ffffff;
   border-radius: 1rem;
   padding: 1.5rem;
   box-shadow: 0 18px 45px rgba(15, 23, 42, 0.08);
-  margin-bottom: 1.5rem;
 }
 
 .hero h1 {
@@ -53,8 +59,8 @@ input {
   gap: 1rem;
 }
 
-.filter-form {
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+.inline-form {
+  grid-template-columns: 1fr auto;
   align-items: end;
 }
 
@@ -87,15 +93,8 @@ button:disabled {
   cursor: not-allowed;
 }
 
-.error-message {
-  margin-top: 1rem;
-  padding: 0.85rem 1rem;
-  border-radius: 0.75rem;
-  background: #fef2f2;
-  color: #b91c1c;
-}
-
-.scope-note {
+.sample-callout,
+.message {
   margin-top: 1rem;
   padding: 0.85rem 1rem;
   border-radius: 0.75rem;
@@ -110,49 +109,43 @@ button:disabled {
   gap: 1rem;
 }
 
-.table-wrap {
-  overflow-x: auto;
+.audit-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
 }
 
-.log-table {
+.audit-item {
   width: 100%;
-  border-collapse: collapse;
-  font-size: 0.9rem;
-}
-
-.log-table th,
-.log-table td {
-  border: 1px solid #cbd5e1;
-  padding: 0.6rem 0.75rem;
+  display: grid;
+  gap: 0.15rem;
   text-align: left;
-  vertical-align: top;
+  background: #f8fafc;
+  color: #0f172a;
+  border: 1px solid #cbd5e1;
 }
 
-.log-table thead th {
-  background: #f1f5f9;
+.audit-item small {
+  color: #64748b;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: minmax(140px, 220px) 1fr;
+  gap: 0.75rem 1rem;
+  margin: 0;
+}
+
+.detail-grid dt {
   font-weight: 700;
   color: #334155;
 }
 
-.log-table tbody tr:nth-child(even) {
-  background: #f8fafc;
-}
-
-.time-cell {
-  white-space: nowrap;
-  color: #334155;
-}
-
-.message-cell {
-  white-space: pre-wrap;
+.detail-grid dd {
+  margin: 0;
   word-break: break-word;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
-  font-size: 0.85rem;
-}
-
-.app-cell {
-  white-space: nowrap;
-  color: #1d4ed8;
 }
 
 @media (max-width: 640px) {
@@ -160,7 +153,11 @@ button:disabled {
     padding: 1rem;
   }
 
-  .filter-form {
+  .inline-form {
+    grid-template-columns: 1fr;
+  }
+
+  .detail-grid {
     grid-template-columns: 1fr;
   }
 }
