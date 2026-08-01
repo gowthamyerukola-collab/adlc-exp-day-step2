@@ -61,33 +61,15 @@ jobs:
               "subscriptionId": "${{ vars.SUBSCRIPTION_ID }}"
             }
 
-      - name: Resolve managed identity IDs
+      - name: Resolve managed identity client ID
         id: mi
         run: |
           MI_CLIENT_ID=$(az identity show \
             --name "id-${{ vars.CONTAINERAPP_NAME }}" \
             --resource-group "${{ vars.RESOURCEGROUP_NAME }}" \
             --query "clientId" -o tsv)
-          MI_PRINCIPAL_ID=$(az identity show \
-            --name "id-${{ vars.CONTAINERAPP_NAME }}" \
-            --resource-group "${{ vars.RESOURCEGROUP_NAME }}" \
-            --query "principalId" -o tsv)
           echo "Resolved managed identity client ID: $MI_CLIENT_ID"
-          echo "Resolved managed identity principal ID: $MI_PRINCIPAL_ID"
           echo "client_id=$MI_CLIENT_ID" >> "$GITHUB_OUTPUT"
-          echo "principal_id=$MI_PRINCIPAL_ID" >> "$GITHUB_OUTPUT"
-
-      - name: Grant Log Analytics Reader role to managed identity
-        continue-on-error: true
-        run: |
-          LAW_ID=$(az monitor log-analytics workspace show \
-            --resource-group "rg-adlc-exp-2608-shared" \
-            --name "law-shared-adlc-exp-1001" \
-            --query "id" -o tsv)
-          az role assignment create \
-            --role "73c42c96-874c-492b-b04d-ab87d138a893" \
-            --assignee "${{ steps.mi.outputs.principal_id }}" \
-            --scope "$LAW_ID"
 
       - name: Substitute template tokens
         run: |
