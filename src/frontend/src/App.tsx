@@ -112,7 +112,6 @@ export default function App({ apiBaseUrl }: AppProps) {
           <label>
             <span>Search message</span>
             <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="e.g. error, warn, exception" />
-            <small className="field-note">Filters log messages by text — useful to spot errors, warnings, or a specific pattern.</small>
           </label>
           <label>
             <span>Rows (max 500)</span>
@@ -127,6 +126,10 @@ export default function App({ apiBaseUrl }: AppProps) {
             {isLoading ? 'Loading…' : 'Show logs'}
           </button>
         </form>
+
+        <p className="field-note">
+          The search box filters log messages by text — useful to spot errors, warnings, or a specific pattern.
+        </p>
 
         {error ? <p className="error-message">{error}</p> : null}
         {containerAppName ? (

@@ -82,6 +82,7 @@ select {
 }
 
 .field-note {
+  margin: 0.75rem 0 0;
   color: #64748b;
 }
 
