@@ -2,7 +2,7 @@ namespace OuterloopLabApi.Configuration;
 
 public sealed class ApplicationEnvironment
 {
-    public string CurrencyApiBaseUrl { get; init; } = "https://frankfurter.dev";
+    public string CurrencyApiBaseUrl { get; init; } = "https://api.frankfurter.app";
     public string? CosmosDbUri { get; init; }
     public string? CosmosDbDatabase { get; init; }
     public string? CosmosDbContainer { get; init; }
@@ -24,7 +24,7 @@ public sealed class ApplicationEnvironment
         CurrencyApiBaseUrl = Environment.GetEnvironmentVariable("CURRENCY_API_BASE_URL")?.Trim() switch
         {
             { Length: > 0 } value => value,
-            _ => "https://frankfurter.dev"
+            _ => "https://api.frankfurter.app"
         },
         CosmosDbUri = Environment.GetEnvironmentVariable("COSMOS_DB_URI"),
         CosmosDbDatabase = Environment.GetEnvironmentVariable("COSMOS_DB_DATABASE"),

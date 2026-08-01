@@ -16,7 +16,7 @@ public sealed class ExternalCurrencyRateProvider(
     {
         try
         {
-            var requestUri = $"/v1/latest?base={Uri.EscapeDataString(fromCurrency)}&symbols={Uri.EscapeDataString(toCurrency)}";
+            var requestUri = $"/latest?from={Uri.EscapeDataString(fromCurrency)}&to={Uri.EscapeDataString(toCurrency)}";
             using var response = await httpClient.GetAsync(requestUri, cancellationToken);
 
             if (!response.IsSuccessStatusCode)
