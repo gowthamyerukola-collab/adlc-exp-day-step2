@@ -91,8 +91,6 @@ try
         : new DefaultAzureCredential(new DefaultAzureCredentialOptions { ManagedIdentityClientId = managedIdentityClientId });
 
     var client = new Microsoft.Azure.Cosmos.CosmosClient(cosmosUri, credential);
-    var dbResponse = await client.CreateDatabaseIfNotExistsAsync(cosmosDbName);
-    var _ = await dbResponse.Database.CreateContainerIfNotExistsAsync(cosmosContainerName, "/id");
 
     cosmosContainer = client.GetContainer(cosmosDbName, cosmosContainerName);
 }
