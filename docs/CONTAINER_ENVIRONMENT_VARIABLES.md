@@ -14,6 +14,7 @@ Environment variables injected into Azure Container App containers, sourced from
 |---|---|---|
 | `ASPNETCORE_ENVIRONMENT` | .NET runtime environment mode. | `"Production"` |
 | `ASPNETCORE_URLS` | URLs the .NET backend binds to. | `"http://+:3000"` |
+| `CURRENCY_API_BASE_URL` | Base URL of the external currency rate provider API. Optional; when unset the backend defaults to Frankfurter at `https://api.frankfurter.app`. | `https://api.frankfurter.app` |
 | `COSMOS_DB_URI` | Cosmos DB account endpoint URI. Resolved at deploy time from the `COSMOSDB_NAME` GitHub variable. | `${COSMOS_DB_URI}` |
 | `COSMOS_DB_DATABASE` | Cosmos DB database name. | `"currency-conversion-db"` |
 | `COSMOS_DB_CONTAINER` | Cosmos DB container name. | `"currencyconversion"` |
