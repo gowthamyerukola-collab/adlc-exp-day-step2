@@ -83,7 +83,9 @@ app.MapGet("/api/conversions", async Task<IResult> (
             title: "One or more validation errors occurred.");
     }
 
-    var client = new Microsoft.Azure.Cosmos.CosmosClient(cosmosUri, credential);
+    var records = await repository.ListRecentAsync(effectiveLimit, cancellationToken);
+    return Results.Ok(records.Select(ConversionAuditResponse.FromRecord).ToArray());
+});
 
 app.Run();
 
