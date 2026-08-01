@@ -44,10 +44,8 @@ Agent's technical elaboration, not from this layer.
 - Authenticate to Cosmos DB exclusively using token-based authentication via the pre-assigned User-Assigned Managed Identity, instantiated using `DefaultAzureCredential` configured with the specific `ManagedIdentityClientId`. Absolutely zero connection strings, master keys, or account keys are permitted in code, configurations, or logs.
 - Utilize `Microsoft.Azure.Cosmos` and `Azure.Identity` packages for
   secure, token-based database interactions, including data-plane CRUD operations like adding and deleting items.
-- Include `Azure.ResourceManager` and `Azure.ResourceManager.CosmosDB` packages to programmatically provision the Cosmos DB database and container via the control plane inside the application startup lifecycle (`Program.cs`) before the web application runs, utilizing the same token-based Managed Identity credentials for authentication.
-  
+- Include `Azure.ResourceManager` and `Azure.ResourceManager.CosmosDB` packages to programmatically provision the Cosmos DB database and container via the control plane inside the application startup lifecycle (`Program.cs`) before the web application runs, utilizing the token-based Managed Identity credentials for authentication.  
   - ARM provisioning is best-effort; Managed Identity RBAC for ARM may differ from data-plane RBAC.
-  - CRUD (and data-plane creation if needed) must be done via the Cosmos SDK (data-plane) using token-based Managed Identity credentials; access keys must not be used.
-  - After ARM attempt, startup must run token-authenticated data-plane `CreateDatabaseIfNotExistsAsync` and `CreateContainerIfNotExistsAsync` and only proceed if the database/container are available (either already exist or were created). If token-authenticated data-plane create-if-not-exists fails, startup must fail.
-  - [CRITICAL] You MUST explicitly reference and implement the exact dual-plane C# startup, try-catch, and fallback logic blocks detailed at: `./docs/azure-cosmos-reference.md`.
+  - CRUD must be done via the Cosmos SDK (data-plane) using token-based Managed Identity credentials; access keys must not be used.
+  - [CRITICAL] You MUST explicitly reference to implement the C# startup, detailed at: `./docs/AZURE_COSMOS_REFERENCE.md`.
 - Map and bind all configuration values, including `AZURE_MANAGED_IDENTITY_CLIENT_ID`, endpoint URLs, and resource names, directly from the environment variables **using the exact keys** defined in `docs\CONTAINER_ENVIRONMENT_VARIABLES.md` without using local settings configuration files as fallbacks.

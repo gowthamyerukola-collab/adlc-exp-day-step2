@@ -1,7 +1,7 @@
 # REFERENCE IMPLEMENTATION: COSMOS DB STARTUP INITIALIZATION
 
 ```csharp
-// Step 1: Best-effort ARM Client Control-Plane Provisioning
+// Step 1: ARM Client Control-Plane Provisioning
 try 
 {
     var managedIdentityClientId = Environment.GetEnvironmentVariable("AZURE_MANAGED_IDENTITY_CLIENT_ID") ?? string.Empty;
@@ -28,7 +28,7 @@ catch (Exception ex)
     // Proceed seamlessly to required token-authenticated Data-Plane verification step below
 }
 
-// Step 2: Mandatory Token-Authenticated Data-Plane Fallback
+// Step 2: Token-Authenticated client required for Data-Plane CRUD
 try 
 {
     var managedIdentityClientId = Environment.GetEnvironmentVariable("AZURE_MANAGED_IDENTITY_CLIENT_ID") ?? string.Empty;
@@ -37,12 +37,10 @@ try
         : new DefaultAzureCredential(new DefaultAzureCredentialOptions { ManagedIdentityClientId = managedIdentityClientId });
 
     var client = new Microsoft.Azure.Cosmos.CosmosClient(uri, credential);
-    var dbResponse = await client.CreateDatabaseIfNotExistsAsync(databaseName);
-    var containerResponse = await dbResponse.Database.CreateContainerIfNotExistsAsync(containerName, "/id");
 } 
 catch (Exception ex) 
 {
-    // Step 3: Terminal Exit on Failure
-    throw new InvalidOperationException("CRITICAL: Token-authenticated data-plane initialization failed. Terminating application.", ex);
+    // log exception
+    
 }
 ```

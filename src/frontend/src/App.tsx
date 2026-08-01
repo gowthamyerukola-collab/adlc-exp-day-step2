@@ -1,219 +1,275 @@
-import { useMemo, useState } from 'react'
-import type { AuditResponse, ConvertResponse } from './api/client'
-import { convertCurrency, fetchAudit } from './api/client'
+import { FormEvent, useEffect, useMemo, useState } from 'react'
 
-type UiError = { message: string } | null
+type ConversionAudit = {
+  id: string
+  requestedAmount: number
+  sourceCurrency: string
+  targetCurrency: string
+  appliedRate: number
+  convertedAmount: number
+  providerMarker: string
+  executionTimestampUtc: string
+}
 
-export default function App() {
-  const [amount, setAmount] = useState('')
-  const [fromCurrency, setFromCurrency] = useState('USD')
-  const [toCurrency, setToCurrency] = useState('EUR')
+type ProblemDetails = {
+  title?: string
+  detail?: string
+}
 
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<UiError>(null)
+type AppProps = {
+  apiBaseUrl: string
+}
 
-  const [conversion, setConversion] = useState<ConvertResponse | null>(null)
+const initialForm = {
+  amount: '100.00',
+  fromCurrency: 'USD',
+  toCurrency: 'EUR',
+}
 
-  const [auditId, setAuditId] = useState('')
-  const [audit, setAudit] = useState<AuditResponse | null>(null)
-  const [auditBusy, setAuditBusy] = useState(false)
-  const [auditError, setAuditError] = useState<UiError>(null)
+export default function App({ apiBaseUrl }: AppProps) {
+  const [form, setForm] = useState(initialForm)
+  const [selectedRecord, setSelectedRecord] = useState<ConversionAudit | null>(null)
+  const [recentRecords, setRecentRecords] = useState<ConversionAudit[]>([])
+  const [lookupId, setLookupId] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isLoadingRecent, setIsLoadingRecent] = useState(true)
+  const [message, setMessage] = useState<string | null>(null)
 
-  const parsedAmount = useMemo(() => {
-    const n = Number(amount)
-    return Number.isFinite(n) ? n : null
-  }, [amount])
+  const conversionsUrl = useMemo(() => `${normalizeBaseUrl(apiBaseUrl)}/api/conversions`, [apiBaseUrl])
 
-  async function onConvert(e: React.FormEvent) {
-    e.preventDefault()
-    setError(null)
-    setConversion(null)
-    setAudit(null)
+  useEffect(() => {
+    void loadRecent()
+  }, [conversionsUrl])
 
-    if (parsedAmount === null) {
-      setError({ message: 'Amount must be a number.' })
-      return
-    }
-
-    setBusy(true)
+  async function loadRecent() {
+    setIsLoadingRecent(true)
     try {
-      const res = await convertCurrency({
-        amount: parsedAmount,
-        fromCurrency,
-        toCurrency,
-      })
-      setConversion(res)
-      setAuditId(res.auditId)
-    } catch (err) {
-      setError({ message: err instanceof Error ? err.message : 'Conversion failed.' })
+      const response = await fetch(`${conversionsUrl}?limit=10`)
+      if (!response.ok) {
+        throw new Error('Unable to load recent audit history.')
+      }
+
+      const records = (await response.json()) as ConversionAudit[]
+      setRecentRecords(records)
+      if (!selectedRecord && records.length > 0) {
+        setSelectedRecord(records[0])
+      }
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Unable to load recent audit history.')
     } finally {
-      setBusy(false)
+      setIsLoadingRecent(false)
     }
   }
 
-  async function onLookup(e: React.FormEvent) {
-    e.preventDefault()
-    setAuditError(null)
-    setAudit(null)
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setIsSubmitting(true)
+    setMessage(null)
 
-    if (!auditId.trim()) {
-      setAuditError({ message: 'Audit ID is required.' })
+    try {
+      const payload = {
+        amount: Number(form.amount),
+        fromCurrency: form.fromCurrency.trim().toUpperCase(),
+        toCurrency: form.toCurrency.trim().toUpperCase(),
+      }
+
+      const response = await fetch(conversionsUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      })
+
+      if (!response.ok) {
+        const problem = (await response.json().catch(() => null)) as ProblemDetails | null
+        throw new Error(problem?.title ?? problem?.detail ?? 'Unable to submit conversion.')
+      }
+
+      const created = (await response.json()) as ConversionAudit
+      setSelectedRecord(created)
+      setLookupId(created.id)
+      setRecentRecords((current) => [created, ...current.filter((record) => record.id !== created.id)].slice(0, 10))
+      setMessage(`Stored audit record ${created.id}.`)
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Unable to submit conversion.')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  async function handleLookup(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setMessage(null)
+
+    if (!lookupId.trim()) {
+      setMessage('Enter an audit identifier to look up a stored conversion.')
       return
     }
 
-    setAuditBusy(true)
     try {
-      const res = await fetchAudit(auditId.trim())
-      setAudit(res)
-    } catch (err) {
-      setAuditError({ message: err instanceof Error ? err.message : 'Lookup failed.' })
-    } finally {
-      setAuditBusy(false)
+      const response = await fetch(`${conversionsUrl}/${encodeURIComponent(lookupId.trim())}`)
+      if (response.status === 404) {
+        setMessage('No audit record was found for that identifier.')
+        return
+      }
+
+      if (!response.ok) {
+        throw new Error('Unable to load the requested audit record.')
+      }
+
+      const record = (await response.json()) as ConversionAudit
+      setSelectedRecord(record)
+      setRecentRecords((current) => [record, ...current.filter((item) => item.id !== record.id)].slice(0, 10))
+      setMessage(`Loaded audit record ${record.id}.`)
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Unable to load the requested audit record.')
     }
   }
 
   return (
-    <div style={{ maxWidth: 900, margin: '24px auto', padding: 16, fontFamily: 'system-ui' }}>
-      <h1 style={{ margin: 0, marginBottom: 16 }}>Real-Time Currency Conversion</h1>
+    <main className="layout">
+      <section className="panel hero">
+        <p className="eyebrow">Real-Time Currency Conversion &amp; Audit Trail</p>
+        <h1>Instant conversions with auditor-ready reconstruction.</h1>
+        <p>
+          Submit a conversion, store the applied rate and timestamps, and reopen any audit record without recomputing it.
+        </p>
+      </section>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 16 }}>
-        <div style={{ border: '1px solid #e5e7eb', borderRadius: 12, padding: 16 }}>
-          <h2 style={{ margin: 0, marginBottom: 12, fontSize: 16 }}>Convert</h2>
-          <form onSubmit={onConvert}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
-              <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <span>Amount</span>
-                <input
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  inputMode="decimal"
-                  placeholder="100.00"
-                  style={{ padding: 8, borderRadius: 8, border: '1px solid #e5e7eb' }}
-                />
-              </label>
-              <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <span>From</span>
-                <input
-                  value={fromCurrency}
-                  onChange={(e) => setFromCurrency(e.target.value)}
-                  placeholder="USD"
-                  style={{ padding: 8, borderRadius: 8, border: '1px solid #e5e7eb' }}
-                />
-              </label>
-              <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <span>To</span>
-                <input
-                  value={toCurrency}
-                  onChange={(e) => setToCurrency(e.target.value)}
-                  placeholder="EUR"
-                  style={{ padding: 8, borderRadius: 8, border: '1px solid #e5e7eb' }}
-                />
-              </label>
-            </div>
-            <div style={{ marginTop: 12, display: 'flex', gap: 12, alignItems: 'center' }}>
-              <button
-                type="submit"
-                disabled={busy}
-                style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #111827', background: '#111827', color: '#fff' }}
-              >
-                {busy ? 'Converting…' : 'Convert'}
-              </button>
-              {error ? <div style={{ color: '#b91c1c' }}>{error.message}</div> : null}
-            </div>
+      <div className="grid">
+        <section className="panel">
+          <h2>New conversion</h2>
+          <form className="form" onSubmit={handleSubmit}>
+            <label>
+              <span>Amount</span>
+              <input
+                type="number"
+                inputMode="decimal"
+                min="0"
+                step="0.01"
+                value={form.amount}
+                onChange={(event) => setForm((current) => ({ ...current, amount: event.target.value }))}
+              />
+            </label>
+            <label>
+              <span>From</span>
+              <input
+                maxLength={3}
+                value={form.fromCurrency}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    fromCurrency: event.target.value.toUpperCase(),
+                  }))
+                }
+              />
+            </label>
+            <label>
+              <span>To</span>
+              <input
+                maxLength={3}
+                value={form.toCurrency}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    toCurrency: event.target.value.toUpperCase(),
+                  }))
+                }
+              />
+            </label>
+            <button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? 'Submitting…' : 'Convert and store audit'}
+            </button>
           </form>
-        </div>
 
-        {conversion ? (
-          <div style={{ border: '1px solid #e5e7eb', borderRadius: 12, padding: 16 }}>
-            <h2 style={{ margin: 0, marginBottom: 12, fontSize: 16 }}>Result</h2>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
-              <div>
-                <div style={{ color: '#6b7280', fontSize: 12 }}>Converted Amount</div>
-                <div style={{ fontSize: 18, fontWeight: 700 }}>{conversion.convertedAmount}</div>
-              </div>
-              <div>
-                <div style={{ color: '#6b7280', fontSize: 12 }}>Provider Rate</div>
-                <div style={{ fontSize: 18, fontWeight: 700 }}>{conversion.providerRate}</div>
-              </div>
-              <div>
-                <div style={{ color: '#6b7280', fontSize: 12 }}>Provider Date</div>
-                <div>{conversion.providerDate ?? '—'}</div>
-              </div>
-              <div>
-                <div style={{ color: '#6b7280', fontSize: 12 }}>Executed At (UTC)</div>
-                <div>{conversion.executedAtUtc}</div>
-              </div>
-              <div style={{ gridColumn: '1 / -1' }}>
-                <div style={{ color: '#6b7280', fontSize: 12 }}>Audit ID</div>
-                <div style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace' }}>{conversion.auditId}</div>
-              </div>
-            </div>
+          <div className="sample-callout">
+            <strong>Sample:</strong> 100.00 USD → EUR should display the stored rate, converted amount, provider marker, and backend execution timestamp.
           </div>
-        ) : null}
+        </section>
 
-        <div style={{ border: '1px solid #e5e7eb', borderRadius: 12, padding: 16 }}>
-          <h2 style={{ margin: 0, marginBottom: 12, fontSize: 16 }}>Audit Lookup</h2>
-          <form onSubmit={onLookup}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 12, alignItems: 'end' }}>
-              <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <span>Audit ID</span>
-                <input
-                  value={auditId}
-                  onChange={(e) => setAuditId(e.target.value)}
-                  placeholder="e.g. 3fa85f64-5717-4562-b3fc-2c963f66afa6"
-                  style={{ padding: 8, borderRadius: 8, border: '1px solid #e5e7eb' }}
-                />
-              </label>
-              <button
-                type="submit"
-                disabled={auditBusy}
-                style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #111827', background: '#111827', color: '#fff' }}
-              >
-                {auditBusy ? 'Looking up…' : 'Lookup'}
-              </button>
-            </div>
-            {auditError ? <div style={{ marginTop: 12, color: '#b91c1c' }}>{auditError.message}</div> : null}
+        <section className="panel">
+          <h2>Audit lookup</h2>
+          <form className="form inline-form" onSubmit={handleLookup}>
+            <label>
+              <span>Audit ID</span>
+              <input value={lookupId} onChange={(event) => setLookupId(event.target.value)} placeholder="Paste a stored audit ID" />
+            </label>
+            <button type="submit">Load audit</button>
           </form>
 
-          {audit ? (
-            <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #e5e7eb' }}>
-              <h3 style={{ margin: 0, marginBottom: 12, fontSize: 14 }}>Stored Conversion</h3>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
-                <div>
-                  <div style={{ color: '#6b7280', fontSize: 12 }}>From / To</div>
-                  <div>
-                    {audit.fromCurrency} → {audit.toCurrency}
-                  </div>
-                </div>
-                <div>
-                  <div style={{ color: '#6b7280', fontSize: 12 }}>Original Amount</div>
-                  <div>{audit.originalAmount}</div>
-                </div>
-                <div>
-                  <div style={{ color: '#6b7280', fontSize: 12 }}>Provider Rate</div>
-                  <div>{audit.providerRate}</div>
-                </div>
-                <div>
-                  <div style={{ color: '#6b7280', fontSize: 12 }}>Converted Amount</div>
-                  <div style={{ fontWeight: 700 }}>{audit.convertedAmount}</div>
-                </div>
-                <div>
-                  <div style={{ color: '#6b7280', fontSize: 12 }}>Provider Date</div>
-                  <div>{audit.providerDate ?? '—'}</div>
-                </div>
-                <div>
-                  <div style={{ color: '#6b7280', fontSize: 12 }}>Executed At (UTC)</div>
-                  <div>{audit.executedAtUtc}</div>
-                </div>
-                <div style={{ gridColumn: '1 / -1' }}>
-                  <div style={{ color: '#6b7280', fontSize: 12 }}>Provider Base URL</div>
-                  <div style={{ wordBreak: 'break-all' }}>{audit.providerBaseUrl}</div>
-                </div>
-              </div>
-            </div>
-          ) : null}
-        </div>
+          {message ? <p className="message">{message}</p> : null}
+
+          {selectedRecord ? <AuditDetail record={selectedRecord} /> : <p>No audit record selected yet.</p>}
+        </section>
       </div>
-    </div>
+
+      <section className="panel">
+        <div className="section-heading">
+          <h2>Recent audit records</h2>
+          <button type="button" onClick={() => void loadRecent()} disabled={isLoadingRecent}>
+            {isLoadingRecent ? 'Refreshing…' : 'Refresh'}
+          </button>
+        </div>
+
+        {recentRecords.length === 0 && !isLoadingRecent ? <p>No audit history yet.</p> : null}
+
+        <ul className="audit-list">
+          {recentRecords.map((record) => (
+            <li key={record.id}>
+              <button type="button" className="audit-item" onClick={() => setSelectedRecord(record)}>
+                <span>
+                  {formatMoney(record.requestedAmount)} {record.sourceCurrency} → {record.targetCurrency}
+                </span>
+                <strong>{formatMoney(record.convertedAmount)}</strong>
+                <small>{formatTimestamp(record.executionTimestampUtc)}</small>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </section>
+    </main>
   )
+}
+
+function AuditDetail({ record }: { record: ConversionAudit }) {
+  return (
+    <dl className="detail-grid">
+      <DetailRow label="Audit ID" value={record.id} />
+      <DetailRow label="Requested amount" value={`${formatMoney(record.requestedAmount)} ${record.sourceCurrency}`} />
+      <DetailRow label="Target currency" value={record.targetCurrency} />
+      <DetailRow label="Applied rate" value={record.appliedRate.toFixed(4)} />
+      <DetailRow label="Converted amount" value={`${formatMoney(record.convertedAmount)} ${record.targetCurrency}`} />
+      <DetailRow label="Provider marker" value={record.providerMarker} />
+      <DetailRow label="Execution timestamp" value={formatTimestamp(record.executionTimestampUtc)} />
+    </dl>
+  )
+}
+
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <>
+      <dt>{label}</dt>
+      <dd>{value}</dd>
+    </>
+  )
+}
+
+function normalizeBaseUrl(value: string) {
+  if (!value) {
+    return ''
+  }
+
+  return value.endsWith('/') ? value.slice(0, -1) : value
+}
+
+function formatMoney(value: number) {
+  return value.toFixed(4)
+}
+
+function formatTimestamp(value: string) {
+  return new Date(value).toLocaleString(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'medium',
+  })
 }
