@@ -26,6 +26,7 @@ export default function App({ apiBaseUrl }: AppProps) {
   const [enrollmentId, setEnrollmentId] = useState('1000')
   const [hours, setHours] = useState(1)
   const [search, setSearch] = useState('')
+  const [limit, setLimit] = useState(100)
   const [logs, setLogs] = useState<LogEntry[]>([])
   const [containerAppName, setContainerAppName] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
@@ -34,7 +35,7 @@ export default function App({ apiBaseUrl }: AppProps) {
   const logsUrl = useMemo(() => `${normalizeBaseUrl(apiBaseUrl)}/api/logs`, [apiBaseUrl])
 
   const loadLogs = useCallback(
-    async (id: string, windowHours: number, filter: string) => {
+    async (id: string, windowHours: number, filter: string, rowLimit: number) => {
       setIsLoading(true)
       setError(null)
       setContainerAppName(null)
@@ -47,6 +48,7 @@ export default function App({ apiBaseUrl }: AppProps) {
         if (filter.trim()) {
           params.set('search', filter.trim())
         }
+        params.set('limit', String(rowLimit))
 
         const response = await fetch(`${logsUrl}?${params.toString()}`)
         if (!response.ok) {
@@ -68,12 +70,12 @@ export default function App({ apiBaseUrl }: AppProps) {
   )
 
   useEffect(() => {
-    void loadLogs('1000', 1, '')
+    void loadLogs('1000', 1, '', 100)
   }, [loadLogs])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    await loadLogs(enrollmentId, hours, search)
+    await loadLogs(enrollmentId, hours, search, limit)
   }
 
   return (
@@ -109,7 +111,17 @@ export default function App({ apiBaseUrl }: AppProps) {
           </label>
           <label>
             <span>Search message</span>
-            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Optional text filter" />
+            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="e.g. error, warn, exception" />
+            <small className="field-note">Filters log messages by text — useful to spot errors, warnings, or a specific pattern.</small>
+          </label>
+          <label>
+            <span>Rows (max 500)</span>
+            <select value={limit} onChange={(event) => setLimit(Number(event.target.value))}>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+              <option value={200}>200</option>
+              <option value={500}>500</option>
+            </select>
           </label>
           <button type="submit" disabled={isLoading}>
             {isLoading ? 'Loading…' : 'Show logs'}
@@ -127,7 +139,7 @@ export default function App({ apiBaseUrl }: AppProps) {
       <section className="panel">
         <div className="section-heading">
           <h2>Log entries</h2>
-          <button type="button" onClick={() => void loadLogs(enrollmentId, hours, search)} disabled={isLoading}>
+          <button type="button" onClick={() => void loadLogs(enrollmentId, hours, search, limit)} disabled={isLoading}>
             {isLoading ? 'Refreshing…' : 'Refresh'}
           </button>
         </div>
