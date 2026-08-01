@@ -1,3 +1,4 @@
+using Azure.Core;
 using OuterloopLabApi.Configuration;
 using OuterloopLabApi.Services;
 
@@ -7,6 +8,7 @@ builder.Services.AddProblemDetails();
 
 var environment = LogViewerEnvironment.FromEnvironment();
 builder.Services.AddSingleton(environment);
+builder.Services.AddSingleton<TokenCredential>(_ => CredentialFactory.Create(environment.ManagedIdentityClientId));
 builder.Services.AddSingleton<LogAnalyticsLogService>();
 
 var app = builder.Build();
